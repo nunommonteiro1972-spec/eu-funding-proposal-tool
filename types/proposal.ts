@@ -1,5 +1,7 @@
 // Proposal-related type definitions
 
+import type { FundingScheme, DynamicSections } from './funding-scheme';
+
 export interface Idea {
   title: string;
   description: string;
@@ -79,7 +81,12 @@ export interface FullProposal {
   title: string;
   summary: string;
 
-  // 11-Section Format
+  // NEW: Funding Scheme Support (optional - for backward compatibility)
+  funding_scheme_id?: string; // Link to funding scheme template
+  funding_scheme?: FundingScheme; // Populated funding scheme object (from join)
+  dynamic_sections?: DynamicSections; // Dynamic content: { "excellence": "text...", "impact": "text..." }
+
+  // Legacy hardcoded sections (kept for backward compatibility)
   relevance: string;
   methods: string;
   impact: string;
