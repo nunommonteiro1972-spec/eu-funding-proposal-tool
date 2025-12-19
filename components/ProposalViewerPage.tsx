@@ -17,6 +17,7 @@ import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, Label } from '@/components/ui/primitives';
 import type { ProposalSettings } from '../types/proposal';
+import { ProposalCopilot } from './ProposalCopilot';
 
 interface ProposalViewerPageProps {
     proposalId: string;
@@ -192,6 +193,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [settings, setSettings] = useState<ProposalSettings>({ currency: 'EUR', sourceUrl: '' });
     const [urlError, setUrlError] = useState<string>('');
+    const [isCopilotOpen, setIsCopilotOpen] = useState(false);
 
     const [newlyAddedSubItem, setNewlyAddedSubItem] = useState<string | null>(null);
     const [isAiSectionDialogOpen, setIsAiSectionDialogOpen] = useState(false);
@@ -1704,7 +1706,22 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                     </Tabs>
                 </DialogContent>
             </Dialog>
-        </div >
+
+            {/* Copilot Toggle Button */}
+            <Button
+                className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-40 bg-gradient-to-r from-primary to-purple-600 hover:scale-105 transition-transform"
+                onClick={() => setIsCopilotOpen(!isCopilotOpen)}
+            >
+                <Sparkles className="h-6 w-6 text-white" />
+            </Button>
+
+            {/* Copilot Sidebar */}
+            <ProposalCopilot
+                proposalId={proposalId}
+                isOpen={isCopilotOpen}
+                onClose={() => setIsCopilotOpen(false)}
+            />
+        </div>
     );
 }
 

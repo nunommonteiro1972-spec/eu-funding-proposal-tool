@@ -61,6 +61,15 @@ npm run dev
 - [ ] Verify "Dynamic Sections" appear in the Viewer.
 - [ ] Verify DOCX export includes these sections.
 
+### **Phase 7: Proposal Copilot (Agentic AI)** 🚧
+**Status:** In Progress (Phase 1)
+- ✅ Architecture Plan created (`ARCHITECTURE_PROPOSAL_COPILOT.md`).
+- ✅ Backend Endpoint created (`supabase/functions/proposal-copilot`).
+- ✅ Frontend Component created (`components/ProposalCopilot.tsx`).
+- ✅ Integrated into Viewer (Floating Button).
+- ✅ Backend Deployed to Supabase (`swvvyxuozwqvyaberqvu`).
+- ⏳ Pending: End-to-End Connection Test.
+
 ---
 
 ## 📝 **NEXT STEPS**
