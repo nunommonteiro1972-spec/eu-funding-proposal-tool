@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
-import { serverUrl, publicAnonKey } from '../utils/supabase/info';
+import { functionsUrl, publicAnonKey } from '../utils/supabase/info';
 
 // Simple utility for conditional classnames
 const cn = (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' ');
@@ -20,9 +20,10 @@ interface ProposalCopilotProps {
     proposalId: string;
     isOpen: boolean;
     onClose: () => void;
+    onProposalUpdate?: () => void;
 }
 
-export function ProposalCopilot({ proposalId, isOpen, onClose }: ProposalCopilotProps) {
+export function ProposalCopilot({ proposalId, isOpen, onClose, onProposalUpdate }: ProposalCopilotProps) {
     const [messages, setMessages] = useState<Message[]>([
         {
             id: 'welcome',
@@ -63,7 +64,7 @@ export function ProposalCopilot({ proposalId, isOpen, onClose }: ProposalCopilot
                 content: m.content
             }));
 
-            const response = await fetch(`${serverUrl}/proposal-copilot`, {
+            const response = await fetch(`${functionsUrl}/proposal-copilot`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -76,7 +77,11 @@ export function ProposalCopilot({ proposalId, isOpen, onClose }: ProposalCopilot
                 }),
             });
 
-            if (!response.ok) throw new Error('Failed to get response');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('Copilot error response:', errorData);
+                throw new Error(errorData.error || `Server error: ${response.status}`);
+            }
 
             const data = await response.json();
 
@@ -89,12 +94,19 @@ export function ProposalCopilot({ proposalId, isOpen, onClose }: ProposalCopilot
 
             setMessages(prev => [...prev, aiMsg]);
 
-        } catch (error) {
+            // Check if the backend performed an action (e.g., updated a section)
+            if (data.action && data.action.type === 'update_section') {
+                if (onProposalUpdate) {
+                    onProposalUpdate();
+                }
+            }
+
+        } catch (error: any) {
             console.error('Copilot error:', error);
             const errorMsg: Message = {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: "I'm sorry, I encountered an error connecting to the server. Please try again.",
+                content: `Error: ${error.message || "I'm sorry, I encountered an error connecting to the server."} Please try again.`,
                 timestamp: Date.now()
             };
             setMessages(prev => [...prev, errorMsg]);
@@ -118,8 +130,14 @@ export function ProposalCopilot({ proposalId, isOpen, onClose }: ProposalCopilot
                         <p className="text-xs text-muted-foreground">AI Assistant (Beta)</p>
                     </div>
                 </div>
-                <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
-                    <X className="h-4 w-4" />
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onClose}
+                    className="h-10 w-10 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                    title="Close Copilot"
+                >
+                    <X className="h-5 w-5" />
                 </Button>
             </div>
 

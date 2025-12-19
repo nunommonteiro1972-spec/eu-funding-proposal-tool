@@ -20,6 +20,7 @@ export const publicAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGci
 // Otherwise it uses the production Supabase URL.
 // Forcing production URL since local Docker is not running
 export const serverUrl = `https://${projectId}.supabase.co/functions/v1/server`;
+export const functionsUrl = `https://${projectId}.supabase.co/functions/v1`;
 // export const serverUrl = import.meta.env.DEV || projectId === "your-project-id"
 //   ? "http://localhost:54321/functions/v1/server"
 //   : `https://${projectId}.supabase.co/functions/v1/server`;

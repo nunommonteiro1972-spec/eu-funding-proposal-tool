@@ -1720,6 +1720,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                 proposalId={proposalId}
                 isOpen={isCopilotOpen}
                 onClose={() => setIsCopilotOpen(false)}
+                onProposalUpdate={loadProposal}
             />
         </div>
     );
