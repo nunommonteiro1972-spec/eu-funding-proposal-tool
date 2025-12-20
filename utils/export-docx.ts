@@ -510,6 +510,72 @@ export async function generateDocx(
   }
 
   // ============================================================================
+  // ANNEXES
+  // ============================================================================
+  docChildren.push(createSectionHeader("1. Annexes"));
+  if (proposal.annexes && proposal.annexes.length > 0) {
+    // Group annexes by type
+    const declarationDocs = proposal.annexes.filter(a => a.type === 'declaration');
+    const accessionDocs = proposal.annexes.filter(a => a.type === 'accession_form');
+    const letterDocs = proposal.annexes.filter(a => a.type === 'letter_of_intent');
+    const cvDocs = proposal.annexes.filter(a => a.type === 'cv');
+
+    // Declaration on Honour
+    docChildren.push(createSubHeader("Declaration on Honour:"));
+    if (declarationDocs.length > 0) {
+      declarationDocs.forEach(doc => {
+        docChildren.push(createParagraph(`• ${doc.title} (${doc.fileName || 'Attached'})`));
+      });
+    } else {
+      docChildren.push(createParagraph("[Placeholder for Declaration on Honour form]"));
+    }
+
+    // Accession Forms
+    docChildren.push(createSubHeader("Accession forms:"));
+    if (accessionDocs.length > 0) {
+      accessionDocs.forEach(doc => {
+        docChildren.push(createParagraph(`• ${doc.title} (${doc.fileName || 'Attached'})`));
+      });
+    } else {
+      docChildren.push(createParagraph("[Placeholder for Accession Forms]"));
+    }
+
+    // Letters of Intent
+    docChildren.push(createSubHeader("Letters of Intent:"));
+    if (letterDocs.length > 0) {
+      letterDocs.forEach(doc => {
+        docChildren.push(createParagraph(`• ${doc.title} (${doc.fileName || 'Attached'})`));
+      });
+    } else {
+      docChildren.push(createParagraph("[Placeholder for any other relevant documents, e.g., Letters of Intent, CVs of key personnel]"));
+    }
+
+    // CVs and Other Documents
+    docChildren.push(createSubHeader("Other Documents:"));
+    if (cvDocs.length > 0) {
+      cvDocs.forEach(doc => {
+        const partnerInfo = doc.partnerName ? ` - ${doc.partnerName}` : '';
+        docChildren.push(createParagraph(`• ${doc.title}${partnerInfo} (${doc.fileName || 'Attached'})`));
+      });
+    } else {
+      docChildren.push(createParagraph("[Placeholder for CVs and other supporting documents]"));
+    }
+  } else {
+    // If no annexes, still add the section with placeholders
+    docChildren.push(createSubHeader("Declaration on Honour:"));
+    docChildren.push(createParagraph("[Placeholder for Declaration on Honour form]"));
+
+    docChildren.push(createSubHeader("Accession forms:"));
+    docChildren.push(createParagraph("[Placeholder for Accession Forms]"));
+
+    docChildren.push(createSubHeader("Letters of Intent:"));
+    docChildren.push(createParagraph("[Placeholder for any other relevant documents, e.g., Letters of Intent, CVs of key personnel]"));
+
+    docChildren.push(createSubHeader("Other Documents:"));
+    docChildren.push(createParagraph("[Placeholder for CVs and other supporting documents]"));
+  }
+
+  // ============================================================================
   // DYNAMIC SECTIONS (if using funding scheme templates)
   // ============================================================================
   if (proposal.dynamic_sections && Object.keys(proposal.dynamic_sections).length > 0) {
@@ -518,7 +584,7 @@ export async function generateDocx(
         .replace(/_/g, " ")
         .replace(/\b\w/g, (l) => l.toUpperCase());
 
-      docChildren.push(createSectionHeader(`${idx + 1}. ${title}`));
+      docChildren.push(createSectionHeader(`${idx + 2}. ${title}`));
       docChildren.push(...convertHtmlToParagraphs(content as string));
     });
   } else {
@@ -542,7 +608,7 @@ export async function generateDocx(
 
     sections.forEach((section, idx) => {
       if (section.content) {
-        docChildren.push(createSectionHeader(`${idx + 1}. ${section.title}`));
+        docChildren.push(createSectionHeader(`${idx + 2}. ${section.title}`));
         docChildren.push(...convertHtmlToParagraphs(section.content));
       }
     });

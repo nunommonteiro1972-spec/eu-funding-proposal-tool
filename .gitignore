@@ -24,4 +24,8 @@ dist-ssr
 *.sw?
 
 .vercel
+.env
 .env*.local
+full_migration.sql
+deploy-functions.mjs
+.agent/

@@ -12,6 +12,7 @@ import { ProposalViewerPage } from './components/ProposalViewerPage';
 import { PartnerEditPage } from './components/PartnerEditPage';
 import { FundingSchemeAdminPage } from './components/FundingSchemeAdminPage';
 import { TestExportPage } from './components/TestExportPage';
+import { AssociatedPartnersPage } from './components/AssociatedPartnersPage';
 
 // Wrapper components to handle navigation props
 const ProposalGeneratorWrapper = () => {
@@ -52,6 +53,7 @@ function App() {
                     <Route path="/funding-hybrid" element={<FundingSearchHybrid />} />
                     <Route path="/partners" element={<PartnersPageWrapper />} />
                     <Route path="/partners/:id" element={<PartnerEditPageWrapper />} />
+                    <Route path="/associated-partners" element={<AssociatedPartnersPage />} />
                     <Route path="/saved" element={<SavedProposalsPageWrapper />} />
                     <Route path="/proposals/:id" element={<ProposalViewerPageWrapper />} />
                     <Route path="/settings" element={<SettingsPage />} />

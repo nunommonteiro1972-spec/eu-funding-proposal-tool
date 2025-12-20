@@ -18,6 +18,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, Label } from '@/components/ui/primitives';
 import type { ProposalSettings } from '../types/proposal';
 import { ProposalCopilot } from './ProposalCopilot';
+import { AnnexesManager } from './AnnexesManager';
+import { ExportOptionsModal, ExportOptions } from './ExportOptionsModal';
+import { exportToZip } from '../utils/export-zip';
 
 interface ProposalViewerPageProps {
     proposalId: string;
@@ -186,8 +189,9 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
     const [proposal, setProposal] = useState<FullProposal | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('narrative');
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isPartnerModalOpen, setIsPartnerModalOpen] = useState(false);
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [partnerToRemove, setPartnerToRemove] = useState<{ index: number; name: string } | null>(null);
     const [budgetLimit, setBudgetLimit] = useState<number>(0);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -244,10 +248,11 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
             });
 
             if (!response.ok) {
-                throw new Error('Failed to load proposal');
+                throw new Error('Failed to fetch proposal');
             }
 
             const data = await response.json();
+            setProposal(data);
 
             // Enrich with Funding Scheme data if ID exists but object is missing
             if (data.funding_scheme_id && !data.funding_scheme) {
@@ -334,7 +339,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
 
     const handleRemovePartnerClick = (index: number, name: string) => {
         setPartnerToRemove({ index, name });
-        setDeleteDialogOpen(true);
+        setIsDeleteModalOpen(true);
     };
 
     const handleRemovePartnerConfirm = async () => {
@@ -342,7 +347,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
         if (!partnerToRemove) return;
 
         const { index, name } = partnerToRemove;
-        setDeleteDialogOpen(false);
+        setIsDeleteModalOpen(false);
 
         const updatedPartners = [...(proposal.partners || [])];
         updatedPartners.splice(index, 1);
@@ -561,6 +566,31 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
         }
     };
 
+    const handleExportProposal = async (options: ExportOptions) => {
+        if (!proposal) return;
+
+        console.log("DEBUG: handleExportProposal called", {
+            type: options.type,
+            annexesCount: proposal.annexes?.length
+        });
+
+        try {
+            if (options.type === 'docx') {
+                await exportToDocx(proposal);
+            } else {
+                await exportToZip(proposal, {
+                    includeProposal: options.type === 'zip_full',
+                    includeAnnexes: true,
+                    includePlaceholders: options.includePlaceholders
+                });
+            }
+            toast.success('Export completed successfully');
+        } catch (error) {
+            console.error('Export error:', error);
+            toast.error('Export failed. Please try again.');
+        }
+    };
+
     const handleUpdateBudget = async (newBudget: any[]) => {
         if (!proposal) return;
 
@@ -700,36 +730,49 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
     // Build sections array including custom sections
     let baseSections: { id: string; title: string; content: string | undefined }[] = [];
 
+    // Add Annexes as the first section
+    baseSections.push({
+        id: 'annexes',
+        title: '1. Annexes',
+        content: 'Annexes Section' // Placeholder to ensure it's rendered
+    });
+
     if (proposal.dynamic_sections && Object.keys(proposal.dynamic_sections).length > 0) {
-        baseSections = Object.entries(proposal.dynamic_sections).map(([key, content], idx) => ({
-            id: key,
-            title: `${idx + 1}. ${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`,
-            content: content as string
-        }));
+        const dynamic = Object.entries(proposal.dynamic_sections)
+            .filter(([key]) => key.toLowerCase() !== 'annexes')
+            .map(([key, content], idx) => ({
+                id: key,
+                title: `${idx + 2}. ${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`,
+                content: content as string
+            }));
+        baseSections = [...baseSections, ...dynamic];
     } else {
         baseSections = [
-            { id: 'introduction', title: '1. Introduction', content: proposal.introduction },
-            { id: 'relevance', title: '2. Relevance', content: proposal.relevance },
-            { id: 'objectives', title: '3. Objectives', content: proposal.objectives },
-            { id: 'methodology', title: '4. Methodology', content: proposal.methodology || proposal.methods },
-            { id: 'workPlan', title: '5. Work Plan', content: proposal.workPlan },
-            { id: 'expectedResults', title: '6. Expected Results', content: proposal.expectedResults },
-            { id: 'impact', title: '7. Impact', content: proposal.impact },
-            { id: 'innovation', title: '8. Innovation', content: proposal.innovation },
-            { id: 'sustainability', title: '9. Sustainability', content: proposal.sustainability },
-            { id: 'consortium', title: '10. Consortium', content: proposal.consortium },
-            { id: 'riskManagement', title: '11. Risk Management', content: proposal.riskManagement },
-            { id: 'dissemination', title: '12. Dissemination & Communication', content: proposal.dissemination },
+            ...baseSections,
+            { id: 'introduction', title: '2. Introduction', content: proposal.introduction },
+            { id: 'relevance', title: '3. Relevance', content: proposal.relevance },
+            { id: 'objectives', title: '4. Objectives', content: proposal.objectives },
+            { id: 'methodology', title: '5. Methodology', content: proposal.methodology || proposal.methods },
+            { id: 'workPlan', title: '6. Work Plan', content: proposal.workPlan },
+            { id: 'expectedResults', title: '7. Expected Results', content: proposal.expectedResults },
+            { id: 'impact', title: '8. Impact', content: proposal.impact },
+            { id: 'innovation', title: '9. Innovation', content: proposal.innovation },
+            { id: 'sustainability', title: '10. Sustainability', content: proposal.sustainability },
+            { id: 'consortium', title: '11. Consortium', content: proposal.consortium },
+            { id: 'riskManagement', title: '12. Risk Management', content: proposal.riskManagement },
+            { id: 'dissemination', title: '13. Dissemination & Communication', content: proposal.dissemination },
         ];
     }
 
     // Add custom sections if they exist
-    const customSections = (proposal.customSections || []).map((section: any, idx: number) => ({
-        id: section.id || `custom-${idx}`,
-        title: `${baseSections.length + idx + 1}. ${section.title}`,
-        content: section.content,
-        isCustom: true
-    }));
+    const customSections = (proposal.customSections || [])
+        .filter((s: any) => s.id !== 'annexes' && s.title?.toLowerCase() !== 'annexes')
+        .map((section: any, idx: number) => ({
+            id: section.id || `custom-${idx}`,
+            title: `${baseSections.length + idx + 1}. ${section.title}`,
+            content: section.content,
+            isCustom: true
+        }));
 
     const sections = [...baseSections, ...customSections];
 
@@ -772,11 +815,13 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                         <Settings className="h-5 w-5" />
                     </Button>
                     <Button
-                        onClick={() => proposal && exportToDocx(proposal)}
-                        className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_15px_rgba(122,162,247,0.3)]"
+                        variant="outline"
+                        size="sm"
+                        className="gap-2 border-primary/20 hover:bg-primary/10 text-primary"
+                        onClick={() => setIsExportModalOpen(true)}
                     >
-                        <Download className="h-4 w-4 mr-2" />
-                        Export DOCX
+                        <Download className="h-4 w-4" />
+                        Export
                     </Button>
                 </div>
             </div>
@@ -791,6 +836,10 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                     <TabsTrigger value="structured" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
                         <LayoutGrid className="h-4 w-4 mr-2" />
                         Structured Data
+                    </TabsTrigger>
+                    <TabsTrigger value="annexes" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+                        <Folder className="h-4 w-4 mr-2" />
+                        Annexes
                     </TabsTrigger>
                 </TabsList>
 
@@ -965,6 +1014,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                 <span className="text-muted-foreground font-medium">Risk Management</span>
                                             </div>
                                         </div>
+
                                     </div>
                                 </ScrollArea>
                             </div>
@@ -982,6 +1032,8 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                     section.id === 'partner_organisations' ||
                                     section.id === 'participating_organisations';
 
+                                const isAnnexSection = section.id === 'annexes';
+
                                 return (
                                     <div key={section.id} id={section.id} className="scroll-mt-24">
                                         <Card className="bg-card/30 border-border/40 hover:border-primary/20 transition-colors">
@@ -989,7 +1041,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                 <CardTitle className="text-lg font-semibold text-foreground/90">
                                                     {section.title}
                                                 </CardTitle>
-                                                {!isPartnerSection && (
+                                                {!isPartnerSection && !isAnnexSection && (
                                                     <Button variant="ghost" size="sm" onClick={() => handleEditSection(section.id, section.title, section.content)}>
                                                         <Edit className="h-4 w-4" />
                                                     </Button>
@@ -999,10 +1051,80 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                         <Settings className="h-4 w-4" />
                                                     </Button>
                                                 )}
+                                                {isAnnexSection && (
+                                                    <Button variant="ghost" size="sm" onClick={() => setActiveTab('annexes')}>
+                                                        <Settings className="h-4 w-4" />
+                                                    </Button>
+                                                )}
                                             </CardHeader>
                                             <CardContent>
                                                 {isPartnerSection ? (
                                                     <DynamicPartnerSection partners={proposal?.partners || []} />
+                                                ) : isAnnexSection ? (
+                                                    <div className="space-y-6 pt-2">
+                                                        {/* Declaration on Honour */}
+                                                        <div>
+                                                            <h4 className="font-semibold text-sm mb-2 text-foreground">Declaration on Honour:</h4>
+                                                            <div className="text-sm text-muted-foreground/80 italic">
+                                                                {proposal.annexes?.filter(a => a.type === 'declaration').length > 0 ? (
+                                                                    <div className="space-y-2">
+                                                                        {proposal.annexes.filter(a => a.type === 'declaration').map(annex => (
+                                                                            <div key={annex.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded border border-border/40">
+                                                                                <FileText className="h-4 w-4 text-purple-500" />
+                                                                                <span className="flex-1">{annex.title}</span>
+                                                                                <span className="text-xs text-muted-foreground">{annex.fileName}</span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    '[Placeholder for Declaration on Honour form]'
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Accession Forms */}
+                                                        <div>
+                                                            <h4 className="font-semibold text-sm mb-2 text-foreground">Accession forms:</h4>
+                                                            <div className="text-sm text-muted-foreground/80 italic">
+                                                                {proposal.annexes?.filter(a => a.type === 'accession_form').length > 0 ? (
+                                                                    <div className="space-y-2">
+                                                                        {proposal.annexes.filter(a => a.type === 'accession_form').map(annex => (
+                                                                            <div key={annex.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded border border-border/40">
+                                                                                <FileText className="h-4 w-4 text-purple-500" />
+                                                                                <span className="flex-1">{annex.title}</span>
+                                                                                <span className="text-xs text-muted-foreground">{annex.fileName}</span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    '[Placeholder for Accession Forms]'
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Letters of Intent / Other */}
+                                                        <div>
+                                                            <h4 className="font-semibold text-sm mb-2 text-foreground">Other Documents:</h4>
+                                                            <div className="text-sm text-muted-foreground/80 italic">
+                                                                {[...(proposal.annexes?.filter(a => a.type === 'letter_of_intent') || []), ...(proposal.annexes?.filter(a => a.type === 'cv') || [])].length > 0 ? (
+                                                                    <div className="space-y-2">
+                                                                        {[...(proposal.annexes?.filter(a => a.type === 'letter_of_intent') || []), ...(proposal.annexes?.filter(a => a.type === 'cv') || [])].map(annex => (
+                                                                            <div key={annex.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded border border-border/40">
+                                                                                <FileText className="h-4 w-4 text-purple-500" />
+                                                                                <span className="flex-1">{annex.title}</span>
+                                                                                {annex.partnerName && (
+                                                                                    <span className="text-xs text-muted-foreground">({annex.partnerName})</span>
+                                                                                )}
+                                                                                <span className="text-xs text-muted-foreground">{annex.fileName}</span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    '[Placeholder for any other relevant documents, e.g., Letters of Intent, CVs of key personnel]'
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 ) : (
                                                     <div className="overflow-x-auto pb-4">
                                                         <div className="prose prose-invert prose-sm max-w-none prose-p:text-muted-foreground/90 prose-headings:text-foreground prose-strong:text-primary/90 prose-li:text-muted-foreground/90 [&_table]:min-w-[1000px] [&_table]:border-collapse [&_table]:text-xs [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-3 [&_td]:align-top [&_tr]:border-b [&_tr]:border-border/50">
@@ -1063,7 +1185,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                 </Card>
                             ))}
                         </div>
-                    </section>
+                    </section >
 
                     <PartnerSelectionModal
                         isOpen={isPartnerModalOpen}
@@ -1327,180 +1449,226 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                         </div>
                     </section>
 
-                </TabsContent>
-            </Tabs>
+                </TabsContent >
+
+                {/* Annexes Tab */}
+                < TabsContent value="annexes" className="space-y-8" >
+                    <AnnexesManager
+                        proposalId={proposalId}
+                        annexes={proposal.annexes || []}
+                        partners={proposal.partners || []}
+                        onUpdate={async (updatedAnnexes) => {
+                            if (!proposal) return;
+                            try {
+                                const updatedProposal = { ...proposal, annexes: updatedAnnexes };
+                                setProposal(updatedProposal);
+
+                                const response = await fetch(`${serverUrl}/proposals/${proposal.id}`, {
+                                    method: 'PUT',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${publicAnonKey}`,
+                                    },
+                                    body: JSON.stringify(updatedProposal),
+                                });
+
+                                if (!response.ok) {
+                                    const errorText = await response.text();
+                                    console.error("DEBUG: PUT request failed", response.status, errorText);
+                                    throw new Error('Failed to update annexes');
+                                }
+
+                                console.log("DEBUG: Proposal updated successfully on backend");
+                                toast.success('Annexes updated successfully');
+                            } catch (error) {
+                                console.error('Update error:', error);
+                                toast.error('Failed to save annexes');
+                            }
+                        }}
+                    />
+                </TabsContent >
+            </Tabs >
 
             <DeleteConfirmDialog
-                open={deleteDialogOpen}
-                onOpenChange={setDeleteDialogOpen}
+                open={isDeleteModalOpen}
+                onOpenChange={setIsDeleteModalOpen}
                 onConfirm={handleRemovePartnerConfirm}
                 title="Remove Partner from Proposal"
                 description={`Are you sure you want to remove ${partnerToRemove?.name} from this proposal? This action cannot be undone.`}
             />
 
+            <ExportOptionsModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onExport={handleExportProposal}
+                proposal={proposal}
+            />
+
             {/* Project Configuration - Full Screen Page */}
-            {isSettingsOpen && (
-                <div className="fixed inset-0 z-50 bg-background flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-200">
-                    {/* Header */}
-                    <div className="border-b px-6 py-4 flex items-center justify-between bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-                        <div className="flex items-center gap-4">
-                            <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(false)}>
-                                <ArrowLeft className="h-5 w-5" />
-                            </Button>
-                            <div>
-                                <h2 className="text-xl font-semibold">Project Configuration</h2>
-                                <p className="text-sm text-muted-foreground">Manage global settings and constraints</p>
+            {
+                isSettingsOpen && (
+                    <div className="fixed inset-0 z-50 bg-background flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-200">
+                        {/* Header */}
+                        <div className="border-b px-6 py-4 flex items-center justify-between bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+                            <div className="flex items-center gap-4">
+                                <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(false)}>
+                                    <ArrowLeft className="h-5 w-5" />
+                                </Button>
+                                <div>
+                                    <h2 className="text-xl font-semibold">Project Configuration</h2>
+                                    <p className="text-sm text-muted-foreground">Manage global settings and constraints</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <Button variant="destructive" onClick={onBack}>
+                                    Exit Proposal
+                                </Button>
+                                <Button onClick={saveSettingsToBackend} className="min-w-[120px]">
+                                    Save & Close
+                                </Button>
                             </div>
                         </div>
-                        <div className="flex gap-2">
-                            <Button variant="destructive" onClick={onBack}>
-                                Exit Proposal
-                            </Button>
-                            <Button onClick={saveSettingsToBackend} className="min-w-[120px]">
-                                Save & Close
-                            </Button>
-                        </div>
-                    </div>
 
-                    {/* Content */}
-                    <div className="flex-1 overflow-y-auto">
-                        <div className="max-w-4xl mx-auto p-8 space-y-8">
+                        {/* Content */}
+                        <div className="flex-1 overflow-y-auto">
+                            <div className="max-w-4xl mx-auto p-8 space-y-8">
 
-                            {/* Main Settings Card */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>General Settings</CardTitle>
-                                    <CardDescription>Configure the base parameters for your proposal</CardDescription>
-                                </CardHeader>
-                                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <Label className="text-base">Project Currency</Label>
-                                        <select
-                                            className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                            value={settings.currency}
-                                            onChange={(e) => handleSaveSettings({ ...settings, currency: e.target.value })}
+                                {/* Main Settings Card */}
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>General Settings</CardTitle>
+                                        <CardDescription>Configure the base parameters for your proposal</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-2">
+                                            <Label className="text-base">Project Currency</Label>
+                                            <select
+                                                className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                                value={settings.currency}
+                                                onChange={(e) => handleSaveSettings({ ...settings, currency: e.target.value })}
+                                            >
+                                                <option value="EUR">EUR (€)</option>
+                                                <option value="USD">USD ($)</option>
+                                                <option value="GBP">GBP (£)</option>
+                                                <option value="CHF">CHF (Fr)</option>
+                                                <option value="NOK">NOK (kr)</option>
+                                                <option value="SEK">SEK (kr)</option>
+                                                <option value="DKK">DKK (kr)</option>
+                                                <option value="ISK">ISK (kr)</option>
+                                                <option value="PLN">PLN (zł)</option>
+                                                <option value="CZK">CZK (Kč)</option>
+                                                <option value="HUF">HUF (Ft)</option>
+                                                <option value="RON">RON (lei)</option>
+                                                <option value="BGN">BGN (лв)</option>
+                                                <option value="HRK">HRK (kn)</option>
+                                                <option value="TRY">TRY (₺)</option>
+                                            </select>
+                                            <p className="text-xs text-muted-foreground">Select the primary currency for budget calculations.</p>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-base">Source URL</Label>
+                                            <Input
+                                                className="h-12"
+                                                value={settings.sourceUrl || ''}
+                                                onChange={(e) => handleSaveSettings({ ...settings, sourceUrl: e.target.value })}
+                                                placeholder="https://..."
+                                            />
+                                            <p className="text-xs text-muted-foreground">Link to the funding call or project description.</p>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Custom Parameters Card */}
+                                <Card>
+                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                                        <div className="space-y-1">
+                                            <CardTitle>Custom Parameters</CardTitle>
+                                            <CardDescription>Define specific constraints like Max Budget, Duration, or Partner Requirements</CardDescription>
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                                const newParams = [...(settings.customParams || []), { key: 'New Parameter', value: '' }];
+                                                handleSaveSettings({ ...settings, customParams: newParams });
+                                            }}
                                         >
-                                            <option value="EUR">EUR (€)</option>
-                                            <option value="USD">USD ($)</option>
-                                            <option value="GBP">GBP (£)</option>
-                                            <option value="CHF">CHF (Fr)</option>
-                                            <option value="NOK">NOK (kr)</option>
-                                            <option value="SEK">SEK (kr)</option>
-                                            <option value="DKK">DKK (kr)</option>
-                                            <option value="ISK">ISK (kr)</option>
-                                            <option value="PLN">PLN (zł)</option>
-                                            <option value="CZK">CZK (Kč)</option>
-                                            <option value="HUF">HUF (Ft)</option>
-                                            <option value="RON">RON (lei)</option>
-                                            <option value="BGN">BGN (лв)</option>
-                                            <option value="HRK">HRK (kn)</option>
-                                            <option value="TRY">TRY (₺)</option>
-                                        </select>
-                                        <p className="text-xs text-muted-foreground">Select the primary currency for budget calculations.</p>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-base">Source URL</Label>
-                                        <Input
-                                            className="h-12"
-                                            value={settings.sourceUrl || ''}
-                                            onChange={(e) => handleSaveSettings({ ...settings, sourceUrl: e.target.value })}
-                                            placeholder="https://..."
-                                        />
-                                        <p className="text-xs text-muted-foreground">Link to the funding call or project description.</p>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            {/* Custom Parameters Card */}
-                            <Card>
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                                    <div className="space-y-1">
-                                        <CardTitle>Custom Parameters</CardTitle>
-                                        <CardDescription>Define specific constraints like Max Budget, Duration, or Partner Requirements</CardDescription>
-                                    </div>
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => {
-                                            const newParams = [...(settings.customParams || []), { key: 'New Parameter', value: '' }];
-                                            handleSaveSettings({ ...settings, customParams: newParams });
-                                        }}
-                                    >
-                                        <Plus className="h-4 w-4 mr-2" />
-                                        Add Parameter
-                                    </Button>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="border rounded-lg overflow-hidden">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-muted/50">
-                                                <tr className="border-b">
-                                                    <th className="text-left p-4 font-medium w-1/3">Parameter Name</th>
-                                                    <th className="text-left p-4 font-medium">Value</th>
-                                                    <th className="w-[60px]"></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {(!settings.customParams || settings.customParams.length === 0) && (
-                                                    <tr>
-                                                        <td colSpan={3} className="p-8 text-center text-muted-foreground bg-muted/10">
-                                                            <div className="flex flex-col items-center gap-2">
-                                                                <Settings className="h-8 w-8 opacity-20" />
-                                                                <p>No custom parameters defined yet.</p>
-                                                            </div>
-                                                        </td>
+                                            <Plus className="h-4 w-4 mr-2" />
+                                            Add Parameter
+                                        </Button>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="border rounded-lg overflow-hidden">
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-muted/50">
+                                                    <tr className="border-b">
+                                                        <th className="text-left p-4 font-medium w-1/3">Parameter Name</th>
+                                                        <th className="text-left p-4 font-medium">Value</th>
+                                                        <th className="w-[60px]"></th>
                                                     </tr>
-                                                )}
-                                                {settings.customParams?.map((param, index) => (
-                                                    <tr key={index} className="border-b last:border-0 hover:bg-muted/5">
-                                                        <td className="p-3">
-                                                            <Input
-                                                                value={param.key}
-                                                                onChange={(e) => {
-                                                                    const newParams = [...(settings.customParams || [])];
-                                                                    newParams[index].key = e.target.value;
-                                                                    handleSaveSettings({ ...settings, customParams: newParams });
-                                                                }}
-                                                                className="border-transparent hover:border-input focus:border-input bg-transparent"
-                                                                placeholder="e.g. Max Budget"
-                                                            />
-                                                        </td>
-                                                        <td className="p-3">
-                                                            <Input
-                                                                value={param.value}
-                                                                onChange={(e) => {
-                                                                    const newParams = [...(settings.customParams || [])];
-                                                                    newParams[index].value = e.target.value;
-                                                                    handleSaveSettings({ ...settings, customParams: newParams });
-                                                                }}
-                                                                className="border-transparent hover:border-input focus:border-input bg-transparent"
-                                                                placeholder="e.g. 500,000 EUR"
-                                                            />
-                                                        </td>
-                                                        <td className="p-3 text-right">
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                                                onClick={() => {
-                                                                    const newParams = [...(settings.customParams || [])];
-                                                                    newParams.splice(index, 1);
-                                                                    handleSaveSettings({ ...settings, customParams: newParams });
-                                                                }}
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                                                </thead>
+                                                <tbody>
+                                                    {(!settings.customParams || settings.customParams.length === 0) && (
+                                                        <tr>
+                                                            <td colSpan={3} className="p-8 text-center text-muted-foreground bg-muted/10">
+                                                                <div className="flex flex-col items-center gap-2">
+                                                                    <Settings className="h-8 w-8 opacity-20" />
+                                                                    <p>No custom parameters defined yet.</p>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                    {settings.customParams?.map((param, index) => (
+                                                        <tr key={index} className="border-b last:border-0 hover:bg-muted/5">
+                                                            <td className="p-3">
+                                                                <Input
+                                                                    value={param.key}
+                                                                    onChange={(e) => {
+                                                                        const newParams = [...(settings.customParams || [])];
+                                                                        newParams[index].key = e.target.value;
+                                                                        handleSaveSettings({ ...settings, customParams: newParams });
+                                                                    }}
+                                                                    className="border-transparent hover:border-input focus:border-input bg-transparent"
+                                                                    placeholder="e.g. Max Budget"
+                                                                />
+                                                            </td>
+                                                            <td className="p-3">
+                                                                <Input
+                                                                    value={param.value}
+                                                                    onChange={(e) => {
+                                                                        const newParams = [...(settings.customParams || [])];
+                                                                        newParams[index].value = e.target.value;
+                                                                        handleSaveSettings({ ...settings, customParams: newParams });
+                                                                    }}
+                                                                    className="border-transparent hover:border-input focus:border-input bg-transparent"
+                                                                    placeholder="e.g. 500,000 EUR"
+                                                                />
+                                                            </td>
+                                                            <td className="p-3 text-right">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                                                    onClick={() => {
+                                                                        const newParams = [...(settings.customParams || [])];
+                                                                        newParams.splice(index, 1);
+                                                                        handleSaveSettings({ ...settings, customParams: newParams });
+                                                                    }}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
             {/* AI Section Generator Dialog */}
             <Dialog open={isAiSectionDialogOpen} onOpenChange={setIsAiSectionDialogOpen}>
                 <DialogContent className="sm:max-w-[600px]">
@@ -1722,7 +1890,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                 onClose={() => setIsCopilotOpen(false)}
                 onProposalUpdate={loadProposal}
             />
-        </div>
+        </div >
     );
 }
 

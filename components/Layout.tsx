@@ -10,7 +10,8 @@ import {
     ChevronDown,
     ChevronRight,
     Folder,
-    Sparkles
+    Sparkles,
+    Building2
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
@@ -42,10 +43,11 @@ export function Layout() {
             ]
         },
         {
-            title: 'Resources',
+            title: 'Sources',
             items: [
                 { href: '/funding', label: 'Funding Search', icon: Search },
                 { href: '/partners', label: 'Partners', icon: Users },
+                { href: '/associated-partners', label: 'Associated Partners', icon: Building2 },
             ]
         },
         {

@@ -82,10 +82,39 @@ export interface TechnicalLayer {
   description: string;
 }
 
+export interface Annex {
+  id?: string;
+  type: 'declaration' | 'accession_form' | 'letter_of_intent' | 'cv' | 'generated_letter';
+  title: string;
+  fileName?: string;
+  fileUrl?: string;
+  filePath?: string;
+  uploadedAt?: string;
+  partnerId?: string; // For CVs and partner-specific documents
+  partnerName?: string;
+  associatedPartnerId?: string; // For generated letters
+}
+
+export interface AssociatedPartner {
+  id: string;
+  name: string;
+  logoUrl?: string;
+  contactPerson?: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  templateUrl?: string;
+  templatePath?: string;
+  createdAt?: string;
+}
+
 export interface FullProposal {
   // Core Fields
   id?: string;
   title: string;
+  finalProjectName?: string;
+  projectAcronym?: string;
   summary: string;
 
   // NEW: Funding Scheme Support (optional - for backward compatibility)
@@ -116,6 +145,10 @@ export interface FullProposal {
   budget: BudgetItem[];
   timeline: TimelinePhase[];
   technicalOverview?: TechnicalLayer[] | string;
+
+  // Annexes
+  annexes?: Annex[];
+  associatedPartnerIds?: string[]; // IDs of associated partners selected for this proposal
 
   // Metadata
   projectUrl?: string;
