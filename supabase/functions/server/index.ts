@@ -76,22 +76,14 @@ Deno.serve(async (req) => {
 
     try {
         // ===== HEALTH CHECK =====
-        if (path === '/' || path === '' || path.endsWith('/server') || path.endsWith('/server/')) {
-            const hasUrl = !!(Deno.env.get('SUPABASE_URL') || Deno.env.get('SERVICE_URL_SUPABASEKONG'));
-            const hasKey = !!(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_SUPABASESERVICE_KEY'));
-            const hasGemini = !!Deno.env.get('GEMINI_API_KEY');
-            return new Response(
-                JSON.stringify({
-                    status: 'ok',
-                    message: 'AI Proposal Generator API v2',
-                    env: {
-                        SUPABASE_URL: hasUrl,
-                        SUPABASE_SERVICE_ROLE_KEY: hasKey,
-                        GEMINI_API_KEY: hasGemini
-                    }
-                }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
+        // Simple string response to bypass any JSON parsing issues
+        if (path === '/' || path === '' || path.includes('/server')) {
+            if (!path.includes('/proposals') && !path.includes('/analyze') && !path.includes('/generate')) {
+                return new Response("AI GENERATOR DEPLOYED v2.2", {
+                    status: 200,
+                    headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
+                });
+            }
         }
 
         // ===== PHASE 1: ANALYZE URL & GENERATE IDEAS =====
@@ -889,20 +881,23 @@ Return ONLY valid JSON, no other text.`;
         );
 
     } catch (error: any) {
-        console.error('Server error:', error);
-        console.error('Error stack:', error.stack);
-        console.error('Error details:', JSON.stringify(error, null, 2));
+        const errorMsg = error.message || 'Internal server error';
+        const errorStack = error.stack || 'No stack trace';
 
-        // Special handling for API quota errors
-        if (error.message && error.message.includes('429')) {
-            return new Response(
-                JSON.stringify({ error: '⏰ API Quota Limit Reached. Please try again later or use your own API key.' }),
-                { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-        }
+        console.error('SERVER ERROR RECOVERY:', {
+            path,
+            method: req.method,
+            error: errorMsg,
+            stack: errorStack
+        });
 
         return new Response(
-            JSON.stringify({ error: error.message || 'Internal server error', details: error.toString() }),
+            JSON.stringify({
+                error: errorMsg,
+                details: error.toString(),
+                stack: errorStack,
+                recovery_hint: 'Check if you are sending an empty body to a POST request'
+            }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
     }
