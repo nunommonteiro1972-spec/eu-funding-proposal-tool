@@ -1,13 +1,14 @@
 // Main server with full AI proposal generation
 // Uses Deno.serve pattern (proven to work with Supabase Edge Functions)
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { GoogleGenerativeAI } from 'npm:@google/generative-ai';
-import { GoogleAIFileManager } from 'npm:@google/generative-ai/server';
-import { Buffer } from 'node:buffer';
-import * as KV from './kv_store.ts';
-import * as PromptBuilder from './prompt_builder.ts';
+// import { createClient } from 'jsr:@supabase/supabase-js@2';
+// import { GoogleGenerativeAI } from 'npm:@google/generative-ai';
+// import { GoogleAIFileManager } from 'npm:@google/generative-ai/server';
+// import { Buffer } from 'node:buffer';
+// import * as KV from './kv_store.ts';
+// import * as PromptBuilder from './prompt_builder.ts';
 
+// Stub for local testing if needed
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
