@@ -76,12 +76,24 @@ Deno.serve(async (req) => {
 
     try {
         // ===== HEALTH CHECK =====
-        // Simple string response to bypass any JSON parsing issues
-        if (path === '/' || path === '' || path.includes('/server')) {
+        if (path === '/' || path === '' || path.trim().endsWith('/server') || path.trim().endsWith('/server/')) {
             if (!path.includes('/proposals') && !path.includes('/analyze') && !path.includes('/generate')) {
-                return new Response("AI GENERATOR DEPLOYED v2.2", {
+                const envUrl = Deno.env.get('SUPABASE_URL') || Deno.env.get('SERVICE_URL_SUPABASEKONG') || 'NOT_SET';
+                const envKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_SUPABASESERVICE_KEY') || 'NOT_SET';
+
+                return new Response(JSON.stringify({
+                    status: "ok",
+                    message: "AI GENERATOR DEPLOYED v2.4",
+                    path_detected: path,
+                    env_status: {
+                        url_ok: envUrl !== 'NOT_SET',
+                        key_ok: envKey !== 'NOT_SET',
+                        url_prefix: envUrl.substring(0, 10),
+                        key_prefix: envKey.substring(0, 5)
+                    }
+                }), {
                     status: 200,
-                    headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             }
         }
