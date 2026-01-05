@@ -1,5 +1,6 @@
 // Debug script to see what HTML EU pages actually return
 // This will help us find the right selectors
+export { };
 
 const testUrl = "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/HORIZON-CL4-2025-04-DATA-03";
 

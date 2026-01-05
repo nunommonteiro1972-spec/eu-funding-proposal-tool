@@ -147,9 +147,13 @@ export function buildProposalPrompt(
     ? `\n\n🎯 MANDATORY USER REQUIREMENTS - MUST BE ADDRESSED IN ALL SECTIONS:\n${userPrompt}\n============================================================`
     : '';
 
+  const targetBudget = constraints.budget || "Not specified";
+
+  // If we have a funding scheme, we use its sections. 
+  // We also keep some core fields like title, summary, etc.
   const dynamicSchemeInstructions = fundingScheme
     ? `\n\nFUNDING SCHEME TEMPLATE (${fundingScheme.name}):
-The proposal MUST follow this specific structure. Generate content for the following sections inside a "dynamicSections" object:
+The proposal MUST follow this specific structure. Generate content for the following sections inside a "dynamicSections" object (as per keys defined below):
 ${fundingScheme.template_json.sections.map((s: any) =>
       `- ${s.label} (Key: "${s.key}"): ${s.description}${s.charLimit ? ` [Limit: ${s.charLimit} chars]` : ''}`
     ).join('\n')}`
@@ -161,38 +165,10 @@ ${fundingScheme.template_json.sections.map((s: any) => `    "${s.key}": "<p>Cont
   },`
     : '';
 
-  return `You are an expert EU funding proposal writer.
-
-SELECTED PROJECT IDEA:
-Title: ${idea.title}
-Description: ${idea.description}
-
-CONTEXT: ${summary}
-
-CONSTRAINTS:
-- Partners: ${constraints.partners || 'Not specified'}
-- Budget: ${constraints.budget || 'Not specified'}
-- Duration: ${constraints.duration || 'Not specified'}${partnerInfo}${userRequirements}${dynamicSchemeInstructions}
-
-TASK: Generate a comprehensive funding proposal.${fundingScheme ? ' Follow the FUNDING SCHEME TEMPLATE structure provided above.' : ''}
-
-CRITICAL REQUIREMENTS:
-1. 🚨 HIGHEST PRIORITY: You MUST STRICTLY ADHERE to all constraints specified in the "MANDATORY USER REQUIREMENTS" section above.
-   - If the user specifies a MAX BUDGET (e.g. "50k"), the total budget MUST NOT exceed this amount.
-   - If the user specifies a DURATION, you must use exactly that duration.
-   - These user-defined constraints OVERRIDE any other defaults or inferred values.
-${userPrompt ? '' : '2. All sections must align with the project idea'}
-${userPrompt ? '2.' : '3.'} Use HTML formatting for text sections (<p>, <strong>, <ul>, <li>, etc.)
-${userPrompt ? '3.' : '4.'} Generate realistic budget in Euros with detailed breakdowns
-${userPrompt ? '4.' : '5.'} Create specific work packages with deliverables
-${userPrompt ? '5.' : '6.'} Include risk assessment matrix
-${userPrompt ? '6.' : '7.'} Generate monthly timeline
-${userPrompt ? '7.' : '8.'} Include a detailed Dissemination & Communication strategy
-
-OUTPUT FORMAT (JSON ONLY, no markdown):
-{
-  "title": "${idea.title}",
-  "summary": "<p>Executive summary...</p>",${dynamicOutputFormat}
+  // Base output format without redundant sections if scheme is present
+  const baseSections = fundingScheme
+    ? `"summary": "<p>Executive summary...</p>",${dynamicOutputFormat}`
+    : `"summary": "<p>Executive summary...</p>",
   "relevance": "<p>Why this project is relevant...</p>",
   "impact": "<p>Expected impact...</p>",
   "methods": "<p>Methodology...</p>",
@@ -205,7 +181,33 @@ OUTPUT FORMAT (JSON ONLY, no markdown):
   "consortium": "<p>Consortium description...</p>",
   "workPlan": "<p>Work plan...</p>",
   "riskManagement": "<p>Risk management...</p>",
-  "dissemination": "<p>Dissemination and communication strategy...</p>",
+  "dissemination": "<p>Dissemination and communication strategy...</p>",`;
+
+  return `You are an expert EU funding proposal writer.
+
+SELECTED PROJECT IDEA:
+Title: ${idea.title}
+Description: ${idea.description}
+
+CONTEXT: ${summary}
+
+### 🚨 HARD PROJECT CONSTRAINTS (CRITICAL - NO EXCEPTIONS) 🚨 ###
+- EXACT TARGET BUDGET: €${targetBudget}
+- PARTNERS: ${constraints.partners || 'Not specified'}
+- DURATION: ${constraints.duration || 'Not specified'}
+${partnerInfo}${userRequirements}${dynamicSchemeInstructions}
+
+### 🛑 BUDGET ADHERENCE RULES (MANDATORY):
+1. THE TOTAL SUM OF ALL 'cost' VALUES IN THE 'budget' ARRAY MUST BE EXACTLY €${targetBudget}. NOT ONE CENT MORE, NOT ONE CENT LESS.
+2. If you include sub-items with quantity and unitCost, the 'total' for that sub-item MUST be (quantity * unitCost).
+3. The 'cost' for a category MUST be the sum of its sub-item 'total' values.
+4. THE OVERALL TOTAL (sum of all category 'cost' fields) MUST EQUAL EXACTLY €${targetBudget}.
+5. MATH VERIFICATION: You must perform a final mental tally. Fail this and the proposal is invalid.
+
+### OUTPUT FORMAT (JSON ONLY):
+{
+  "title": "${idea.title}",
+  ${baseSections}
   "partners": [
     { "name": "Partner Name", "role": "Role in project" }
   ],
@@ -233,33 +235,18 @@ OUTPUT FORMAT (JSON ONLY, no markdown):
   ],
   "budget": [
     {
-      "item": "Personnel",
-      "cost": 500000,
-      "description": "Project staff costs",
-      "breakdown": [
-        { "subItem": "Project Manager", "quantity": 1, "unitCost": 80000, "total": 80000 },
-        { "subItem": "Researchers", "quantity": 5, "unitCost": 70000, "total": 350000 }
-      ]
-    },
-    {
-      "item": "Dissemination",
+      "category": "Project Management",
       "cost": 50000,
-      "description": "Dissemination and communication activities",
       "breakdown": [
-        { "subItem": "Website & Social Media", "quantity": 1, "unitCost": 10000, "total": 10000 },
-        { "subItem": "Events & Conferences", "quantity": 4, "unitCost": 10000, "total": 40000 }
+        { "subItem": "Coordination", "quantity": 1, "unitCost": 30000, "total": 30000 },
+        { "subItem": "Meetings", "quantity": 4, "unitCost": 5000, "total": 20000 }
       ]
     }
   ],
   "timeline": [
-    {
-      "phase": "Phase 1: Setup",
-      "activities": ["Activity 1", "Activity 2"],
-      "startMonth": 1,
-      "endMonth": 6
-    }
+    { "phase": "M1-M6", "activity": "Research & Design" }
   ]
 }
 
-Return ONLY valid JSON, no other text.`;
+Return ONLY valid JSON (no markdown, no other text).`;
 }

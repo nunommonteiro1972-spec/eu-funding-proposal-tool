@@ -144,7 +144,9 @@ export interface FullProposal {
   risks: Risk[];
   budget: BudgetItem[];
   timeline: TimelinePhase[];
+  customSections?: { id: string; title: string; content: string }[];
   technicalOverview?: TechnicalLayer[] | string;
+
 
   // Annexes
   annexes?: Annex[];

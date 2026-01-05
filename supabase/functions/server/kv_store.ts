@@ -4,9 +4,16 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const getSupabaseClient = () => {
-  const url = Deno.env.get('SUPABASE_URL') || '';
-  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-  return createClient(url, key);
+  // Current code expects SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
+  // User has set SERVICE_URL_SUPABASEKONG and SERVICE_SUPABASESERVICE_KEY
+  const url = Deno.env.get('SUPABASE_URL') || Deno.env.get('SERVICE_URL_SUPABASEKONG');
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_SUPABASESERVICE_KEY');
+
+  if (!url || !key) {
+    console.error('KV MODULE: MISSING ENV VARS', { url: !!url, key: !!key });
+  }
+
+  return createClient(url || '', key || '');
 };
 
 const TABLE_NAME = 'kv_store_3cb71dae';

@@ -26,5 +26,13 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "supabase/functions",
+    "test-scraper.ts",
+    "debug-eu-html.ts",
+    "quick-test.mjs"
+  ]
 }

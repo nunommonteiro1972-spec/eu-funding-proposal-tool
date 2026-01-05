@@ -15,9 +15,22 @@ const corsHeaders = {
 };
 
 const getSupabaseClient = () => {
-    const url = Deno.env.get('SUPABASE_URL') || '';
-    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-    return createClient(url, key);
+    // Current code expects SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
+    // User has set SERVICE_URL_SUPABASEKONG and SERVICE_SUPABASESERVICE_KEY
+    const url = Deno.env.get('SUPABASE_URL') || Deno.env.get('SERVICE_URL_SUPABASEKONG');
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_SUPABASESERVICE_KEY');
+
+    if (!url || !key) {
+        console.error('MISSING ENV VARS:', {
+            url: !!url,
+            key: !!key,
+            available: Object.keys(Deno.env.toObject()).filter(k => k.includes('SUPABASE') || k.includes('SERVICE'))
+        });
+        // In self-hosted, we might need to fallback to localhost/internal if not set
+        // but it's better to require them.
+    }
+
+    return createClient(url || '', key || '');
 };
 
 const getAI = () => {
@@ -63,9 +76,20 @@ Deno.serve(async (req) => {
 
     try {
         // ===== HEALTH CHECK =====
-        if (path === '/' || path === '') {
+        if (path === '/' || path === '' || path.endsWith('/server') || path.endsWith('/server/')) {
+            const hasUrl = !!(Deno.env.get('SUPABASE_URL') || Deno.env.get('SERVICE_URL_SUPABASEKONG'));
+            const hasKey = !!(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_SUPABASESERVICE_KEY'));
+            const hasGemini = !!Deno.env.get('GEMINI_API_KEY');
             return new Response(
-                JSON.stringify({ status: 'ok', message: 'AI Proposal Generator API v2' }),
+                JSON.stringify({
+                    status: 'ok',
+                    message: 'AI Proposal Generator API v2',
+                    env: {
+                        SUPABASE_URL: hasUrl,
+                        SUPABASE_SERVICE_ROLE_KEY: hasKey,
+                        GEMINI_API_KEY: hasGemini
+                    }
+                }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
         }
@@ -74,28 +98,38 @@ Deno.serve(async (req) => {
         if (path.includes('/analyze-url') && req.method === 'POST') {
             const { url: targetUrl, userPrompt } = await req.json();
 
-            // Fetch URL content
+            const isTextMode = targetUrl === 'https://text-mode-placeholder.com';
             let content = '';
-            try {
-                const res = await fetch(targetUrl);
-                content = await res.text();
-                content = content.substring(0, 20000); // Limit to 20k chars
-            } catch (e) {
-                content = 'Could not fetch URL content. Please rely on user prompt.';
+
+            if (!isTextMode) {
+                // Fetch URL content for URL mode
+                try {
+                    const res = await fetch(targetUrl);
+                    if (res.ok) {
+                        content = await res.text();
+                        content = content.substring(0, 20000); // Limit to 20k chars
+                    }
+                } catch (e) {
+                    console.log('Fetch failed, falling back to prompt only');
+                }
             }
 
             const ai = getAI();
 
             // Phase 1: Extract summary and constraints
-            const phase1Prompt = `Analyze this funding call and extract key information.
+            const phase1Prompt = isTextMode
+                ? `Analyze this funding call text or project description.
 
-URL: ${targetUrl}
-CONTENT: ${content.substring(0, 5000)}
+TEXT CONTENT:
+${userPrompt}
+
+TASK: Extract key information.
+CRITICAL: If a budget limit is mentioned (e.g. "budget 250k", "max 250,000"), extract ONLY the numeric value (e.g. "250000").
 
 Extract:
-1. A summary of the funding opportunity
+1. A summary of the opportunity
 2. Partner requirements
-3. Budget range
+3. Numeric budget limit (MANDATORY: Use ONLY the number if found)
 4. Project duration
 
 Return JSON:
@@ -103,12 +137,39 @@ Return JSON:
   "summary": "Summary of the opportunity",
   "constraints": {
     "partners": "e.g., 3-5 partners required",
-    "budget": "e.g., €500,000 - €2,000,000",
+    "budget": "250000",
     "duration": "e.g., 24-36 months"
   }
 }
 
-Return ONLY valid JSON, no other text.`;
+Return ONLY valid JSON.`
+                : `Analyze this funding call and extract key information.
+            
+URL: ${targetUrl}
+URL CONTENT: ${content.substring(0, 5000)}
+${userPrompt ? `USER SPECIFIC REQUIREMENTS: ${userPrompt}` : ''}
+
+TASK: Parse the funding call AND the user requirements.
+CRITICAL: User requirements take precedence. If the user specifies a budget limit in their requirements, use that exactly.
+
+Extract:
+1. A summary of the funding opportunity
+2. Partner requirements
+3. Numeric budget limit (MANDATORY: Extract ONLY the number if possible, e.g. "250000")
+4. Project duration
+
+Return JSON:
+{
+  "summary": "Summary of the opportunity",
+  "constraints": {
+    "partners": "e.g., 3-5 partners required",
+    "budget": "250000",
+    "duration": "e.g., 24-36 months"
+  }
+}
+
+Return ONLY valid JSON.`;
+
 
             const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
             const phase1Result = await model.generateContent(phase1Prompt);
@@ -253,15 +314,21 @@ Return ONLY valid JSON, no other text.`;
 
         // GET /proposals - List all
         if (path.includes('/proposals') && req.method === 'GET' && !path.match(/\/proposals\/[^\/]+$/)) {
-            const proposals = await KV.getByPrefix('proposal-');
-            return new Response(
-                JSON.stringify({
-                    proposals: proposals.sort((a: any, b: any) =>
-                        new Date(b.savedAt || b.generatedAt).getTime() - new Date(a.savedAt || a.generatedAt).getTime()
-                    )
-                }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
+            try {
+                const proposals = await KV.getByPrefix('proposal-');
+                console.log(`Fetched ${proposals.length} proposals`);
+                return new Response(
+                    JSON.stringify({
+                        proposals: proposals.sort((a: any, b: any) =>
+                            new Date(b.savedAt || b.generatedAt).getTime() - new Date(a.savedAt || a.generatedAt).getTime()
+                        )
+                    }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                );
+            } catch (kvError: any) {
+                console.error('KV getByPrefix error:', kvError);
+                throw kvError;
+            }
         }
 
         // GET /proposals/:id - Get single
@@ -685,15 +752,21 @@ Return ONLY a valid JSON object:
             const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
             // Step 1: Determine which section to edit
+            const baseSections = [
+                'title', 'summary', 'relevance', 'methods', 'impact',
+                'introduction', 'objectives', 'methodology', 'expectedResults',
+                'innovation', 'sustainability', 'consortium', 'workPlan',
+                'riskManagement', 'dissemination', 'budget'
+            ];
+            const dynamicSections = proposal.dynamic_sections ? Object.keys(proposal.dynamic_sections) : [];
+            const allAvailableSections = [...new Set([...baseSections, ...dynamicSections])];
+
             const detectionPrompt = `Given this user instruction: "${instruction}"
 
 Which ONE section of the proposal should be edited?
 
 Available sections:
-- title, summary, relevance, methods, impact
-- introduction, objectives, methodology, expectedResults
-- innovation, sustainability, consortium, workPlan, riskManagement
-- dissemination
+${allAvailableSections.map(s => `- ${s}`).join('\n')}
 
 Return JSON: { "section": "sectionName" }
 
@@ -704,11 +777,25 @@ Return ONLY valid JSON, no other text.`;
             const { section } = JSON.parse(detectText.replace(/```json/g, '').replace(/```/g, '').trim());
 
             // Step 2: Regenerate that section
-            const editPrompt = `Current content of ${section}: ${JSON.stringify(proposal[section])}
+            const budgetLimit = proposal.settings?.constraints?.budget || proposal.settings?.customParams?.find((p: any) => p.key === 'Max Budget')?.value || 'Not specified';
 
-User instruction: ${instruction}
+            const currentContent = (proposal.dynamic_sections && proposal.dynamic_sections[section])
+                ? proposal.dynamic_sections[section]
+                : proposal[section];
 
-Generate the NEW content for this section only. Maintain the same format (HTML string if it was HTML, array if it was array, etc.).
+            const editPrompt = `You are editing a specific section of a funding proposal.
+            
+PROPOSAL SUMMARY: ${proposal.summary}
+MANDATORY CONSTRAINTS:
+- Max Budget: ${budgetLimit}
+
+SECTION TO EDIT: ${section}
+CURRENT CONTENT: ${JSON.stringify(currentContent)}
+
+USER INSTRUCTION: ${instruction}
+
+TASK: Generate the NEW content for this section only. 
+CRITICAL: 🚨 You MUST STRICTLY respect the mandatory constraints (especially the Max Budget) if the instruction relates to them. If you are editing the budget section, ensure the total sum remains within the limit.
 
 Return JSON: { "content": ... }
 
@@ -719,7 +806,12 @@ Return ONLY valid JSON, no other text.`;
             const { content } = JSON.parse(editText.replace(/```json/g, '').replace(/```/g, '').trim());
 
             // Update proposal
-            proposal[section] = content;
+            if (proposal.dynamic_sections && proposal.dynamic_sections[section] !== undefined) {
+                proposal.dynamic_sections[section] = content;
+            } else {
+                proposal[section] = content;
+            }
+
             proposal.updatedAt = new Date().toISOString();
             await KV.set(id, proposal);
 
@@ -728,6 +820,7 @@ Return ONLY valid JSON, no other text.`;
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
         }
+
 
         // POST /generate-section - Generate new proposal section with AI
         if (path.includes('/generate-section') && req.method === 'POST') {

@@ -1,5 +1,6 @@
 // Test script for EU funding page scraper
 // Run with: deno run --allow-net test-scraper.ts
+export { };
 
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.45/deno-dom-wasm.ts";
 

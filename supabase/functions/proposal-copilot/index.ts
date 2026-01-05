@@ -146,25 +146,31 @@ Deno.serve(async (req) => {
                 parts: [{
                     text: `You are a proposal assistant. Context: ${JSON.stringify(context)}
                 
-IMPORTANT: If the user asks to "redo", "rewrite", "update", or "change" a specific section (e.g., "redo the methodology", "update the risks"), you MUST perform the update.
+IMPORTANT: If user asks to update a section, you MUST perform the update.
 
-To perform an update, your response MUST be a JSON object with this structure:
+🚨 CRITICAL RULES FOR UPDATES:
+1. SECTIONS: You can update base sections (summary, relevance, impact, budget, etc.) OR keys within 'dynamic_sections' if they exist.
+2. EXACT TARGET BUDGET: Check 'settings.customParams' for 'Max Budget'. The TOTAL sum of the 'budget' section MUST be EXACTLY this amount.
+3. NO LIMITS, ONLY TARGETS: Do not just stay "under" the budget. You MUST reach the EXACT budget figure. Not one cent more or less.
+4. SCALE PROPORTIONALLY: If you are asked to add more costs, you MUST scale down other items to maintain the EXACT total.
+5. MATH VERIFICATION: Perform a manual tally of all 'cost' fields in the budget array. The final sum MUST EQUAL the target budget.
+
+To perform an update, your response MUST be a JSON object:
 {
   "action": "update_section",
   "section": "section_name_key",
-  "content": "The new content for the section...",
-  "explanation": "I have updated the section as requested."
+  "content": "Full new content (HTML or data structure)",
+  "explanation": "Brief explanation of the update and how you ensured the budget remains exactly on target."
 }
 
-The "section_name_key" must be one of the keys in the context (e.g., 'methodology', 'risks', 'budget', 'objectives', 'summary', etc.).
-The "content" should be the full new content for that section (HTML or text as appropriate).
-The "explanation" is what I will show to the user.
+NOTE: If the section is from 'dynamic_sections', just use its key (e.g. 'excellence'). If it's a base section, use its key (e.g. 'summary').
 
-If the user is just asking a question, reply with normal text (not JSON).` }],
+If just answering a question, respond with normal text.` }],
             },
+
             {
                 role: "model",
-                parts: [{ text: "I understand. I will answer questions normally, but if asked to update a section, I will output the specific JSON format to trigger the update." }],
+                parts: [{ text: "I understand. I will strictly follow the target budget. If I update a section, especially the budget, I will ensure the total is EXACTLY the specified amount, not a cent more or less." }],
             },
         ];
 
@@ -193,7 +199,7 @@ If the user is just asking a question, reply with normal text (not JSON).` }],
         console.log('Response text extracted, length:', text.length);
 
         // Check if response is JSON (action)
-        let responseData = { response: text };
+        let responseData: { response: string; action?: any } = { response: text };
 
         try {
             // Attempt to find JSON in the response (in case of extra text)

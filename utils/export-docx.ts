@@ -15,7 +15,7 @@ import {
   convertInchesToTwip,
 } from "docx";
 import { saveAs } from "file-saver";
-import { FullProposal } from "../types/proposal";
+import { FullProposal, Partner } from "../types/proposal";
 
 // ============================================================================
 // HELPER FUNCTIONS FOR CONSISTENT STYLING
@@ -69,19 +69,70 @@ function createSubHeader(text: string): Paragraph {
 }
 
 /**
- * Creates a regular paragraph
+ * Creates a regular paragraph with optional formatting
  */
-function createParagraph(text: string): Paragraph {
+function createParagraph(text: string, options: { bold?: boolean; italic?: boolean; size?: number; color?: string } = {}): Paragraph {
   return new Paragraph({
     children: [
       new TextRun({
         text,
-        size: BODY_SIZE,
+        size: options.size || BODY_SIZE,
         font: FONT,
+        bold: options.bold,
+        italics: options.italic,
+        color: options.color,
       }),
     ],
     spacing: { before: 100, after: 100 },
   });
+}
+
+function createPartnerOrganisationSection(partners: Partner[]): (Paragraph | Table)[] {
+  if (!partners || partners.length === 0) {
+    return [createParagraph("No partners added yet.", { italic: true })];
+  }
+
+  const result: (Paragraph | Table)[] = [];
+
+  partners.forEach((partner, index) => {
+    result.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `${index + 1}. ${partner.name}`,
+            bold: true,
+            color: "1F4788",
+            size: SUBHEADER_SIZE,
+            font: FONT
+          }),
+        ],
+        spacing: { before: 400, after: 200 },
+      })
+    );
+
+    const details: string[] = [];
+    if (partner.role) details.push(`Role: ${partner.role}`);
+    if (partner.country) details.push(`Country: ${partner.country}`);
+    if (partner.organisationId) details.push(`OID: ${partner.organisationId}`);
+    if (partner.organizationType) details.push(`Type: ${partner.organizationType}`);
+    if (partner.website) details.push(`Website: ${partner.website}`);
+
+    if (details.length > 0) {
+      result.push(createParagraph(details.join(" | "), { size: 18, color: "666666" }));
+    }
+
+    if (partner.description && partner.description.trim()) {
+      result.push(createSubHeader("Background:"));
+      result.push(createParagraph(partner.description));
+    }
+
+    if (partner.experience && partner.experience.trim()) {
+      result.push(createSubHeader("Experience:"));
+      result.push(createParagraph(partner.experience));
+    }
+  });
+
+  return result;
 }
 
 /**
@@ -160,7 +211,7 @@ function convertHtmlToParagraphs(html: string | undefined | null): (Paragraph | 
         const tagName = el.tagName.toUpperCase();
 
         if (['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(tagName)) {
-          let level = HeadingLevel.HEADING_3; // Default map for content
+          let level: any = HeadingLevel.HEADING_3; // Default map for content
           if (tagName === 'H1') level = HeadingLevel.HEADING_2; // Demote H1 to H2 to fit doc structure
           if (tagName === 'H2') level = HeadingLevel.HEADING_3;
 
@@ -238,7 +289,7 @@ function convertHtmlToParagraphs(html: string | undefined | null): (Paragraph | 
                   font: FONT
                 })],
                 spacing: { before: 240, after: 120 },
-                border: { bottom: { color: "CCCCCC", space: 1, value: "single", size: 6 } }
+                border: { bottom: { color: "CCCCCC", space: 1, style: BorderStyle.SINGLE, size: 6 } }
               }));
 
               row.forEach((cell, cIdx) => {
@@ -576,22 +627,36 @@ export async function generateDocx(
   }
 
   // ============================================================================
-  // DYNAMIC SECTIONS (if using funding scheme templates)
+  // NARRATIVE SECTIONS
   // ============================================================================
+  let currentSectionNumber = 2;
+
+  // 1. DYNAMIC SECTIONS (if using funding scheme templates)
   if (proposal.dynamic_sections && Object.keys(proposal.dynamic_sections).length > 0) {
-    Object.entries(proposal.dynamic_sections).forEach(([key, content], idx) => {
+    Object.entries(proposal.dynamic_sections).forEach(([key, content]) => {
       const title = key
         .replace(/_/g, " ")
         .replace(/\b\w/g, (l) => l.toUpperCase());
 
-      docChildren.push(createSectionHeader(`${idx + 2}. ${title}`));
-      docChildren.push(...convertHtmlToParagraphs(content as string));
+      const isPartnerSection =
+        title.toLowerCase().includes('partner organisation') ||
+        title.toLowerCase().includes('participating organisation') ||
+        key === 'consortium' ||
+        key === 'partner_organisations' ||
+        key === 'participating_organisations';
+
+      docChildren.push(createSectionHeader(`${currentSectionNumber}. ${title}`));
+      currentSectionNumber++;
+
+      if (isPartnerSection) {
+        docChildren.push(...createPartnerOrganisationSection(proposal.partners || []));
+      } else {
+        docChildren.push(...convertHtmlToParagraphs(content as string));
+      }
     });
   } else {
-    // ============================================================================
-    // LEGACY SECTIONS (fallback for older proposals)
-    // ============================================================================
-    const sections = [
+    // 2. LEGACY SECTIONS (fallback for older proposals)
+    const legacySections = [
       { title: "Introduction", content: proposal.introduction },
       { title: "Relevance", content: proposal.relevance },
       { title: "Objectives", content: proposal.objectives },
@@ -606,10 +671,41 @@ export async function generateDocx(
       { title: "Dissemination & Communication", content: proposal.dissemination },
     ];
 
-    sections.forEach((section, idx) => {
+    legacySections.forEach((section) => {
       if (section.content) {
-        docChildren.push(createSectionHeader(`${idx + 2}. ${section.title}`));
-        docChildren.push(...convertHtmlToParagraphs(section.content));
+        const isPartnerSection =
+          section.title.toLowerCase().includes('partner organisation') ||
+          section.title.toLowerCase().includes('participating organisation') ||
+          section.title.toLowerCase() === 'consortium';
+
+        docChildren.push(createSectionHeader(`${currentSectionNumber}. ${section.title}`));
+        currentSectionNumber++;
+
+        if (isPartnerSection) {
+          docChildren.push(...createPartnerOrganisationSection(proposal.partners || []));
+        } else {
+          docChildren.push(...convertHtmlToParagraphs(section.content));
+        }
+      }
+    });
+  }
+
+  // 3. CUSTOM SECTIONS (added by user)
+  if (proposal.customSections && proposal.customSections.length > 0) {
+    proposal.customSections.forEach((section) => {
+      if (section.content) {
+        const isPartnerSection =
+          section.title.toLowerCase().includes('partner organisation') ||
+          section.title.toLowerCase().includes('participating organisation');
+
+        docChildren.push(createSectionHeader(`${currentSectionNumber}. ${section.title}`));
+        currentSectionNumber++;
+
+        if (isPartnerSection) {
+          docChildren.push(...createPartnerOrganisationSection(proposal.partners || []));
+        } else {
+          docChildren.push(...convertHtmlToParagraphs(section.content));
+        }
       }
     });
   }
