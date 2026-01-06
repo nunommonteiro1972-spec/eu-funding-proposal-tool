@@ -1,4 +1,4 @@
 project_id = "vps-local"
 
-[functions.server]
-verify_jwt = false
+# [functions.server]
+# verify_jwt = false
