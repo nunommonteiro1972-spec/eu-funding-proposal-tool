@@ -1,7 +1,7 @@
 // BUNDLED SERVER FUNCTION
 // This file includes kv_store.ts and prompt_builder.ts logic to work around single-file deployment limitations in self-hosted Supabase.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 import { GoogleGenerativeAI } from 'npm:@google/generative-ai';
 import { GoogleAIFileManager } from 'npm:@google/generative-ai/server';
 
