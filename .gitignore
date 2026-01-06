@@ -10,22 +10,9 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-.vercel
-.env
-.env*.local
+# *.local
+# .env
+# .env*.local
 full_migration.sql
-deploy-functions.mjs
+# deploy-functions.mjs
 .agent/
